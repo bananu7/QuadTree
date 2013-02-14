@@ -11,3 +11,9 @@
 *.lai
 *.la
 *.a
+
+#VS
+Debug
+Release
+*.sdf
+*.opensdf
