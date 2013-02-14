@@ -33,6 +33,7 @@ public:
 	SquareNode root;
 
 	void RecursiveMap(SquareNodePtr node, std::function<void(SquareNodePtr)> const& fun);
+	SquareNodePtr _traverse(unsigned x, unsigned y);
 
 public:
 	void QuadTree::Add (TData element, unsigned x, unsigned y);

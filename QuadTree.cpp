@@ -31,8 +31,56 @@ namespace
 	}
 }
 
+QuadTree::SquareNodePtr QuadTree::_traverse(unsigned x, unsigned y)
+{
+	SquareNodePtr act;
+	unsigned level = startLevel;
+	unsigned upper_x_bound = baseSize,
+				upper_y_bound = baseSize,
+				lower_x_bound = 0,
+				lower_y_bound = 0;
+
+	if (
+		(x >= upper_x_bound) &&
+		(y >= upper_y_bound) &&
+		(x < lower_x_bound) &&
+		(y < lower_y_bound)
+		)
+		throw exception("Adding beyond root boundaries");
+
+	act = &root;
+
+	while (level-- > 0)
+	{
+		EQuadrant next_q = calculate_quadrant(
+			x, y,
+			upper_x_bound, lower_x_bound,
+			upper_y_bound, lower_y_bound
+		);
+
+		if (next_q & RIGHT_BIT)
+			lower_x_bound = (upper_x_bound - lower_x_bound) / 2;
+		else
+			upper_x_bound = (upper_x_bound - lower_x_bound) / 2 + lower_y_bound;
+
+		if (next_q & BOT_BIT)
+			lower_y_bound = (upper_y_bound - lower_y_bound) / 2;
+		else
+			upper_y_bound = (upper_y_bound - lower_y_bound) / 2 + lower_y_bound;
+
+		// Node not found
+		if (! (act->nodes[next_q])) {
+			return 0;
+			//act->nodes[next_q] = new SquareNode;
+		}
+		act = act->nodes[next_q];
+	}
+	return act;
+}
+
 void QuadTree::Add (TData element, unsigned x, unsigned y)
 {
+	
 	SquareNodePtr act;
 	unsigned level = startLevel;
 	unsigned upper_x_bound = baseSize,
@@ -74,18 +122,24 @@ void QuadTree::Add (TData element, unsigned x, unsigned y)
 		else
 			upper_y_bound = (upper_y_bound - lower_y_bound) / 2 + lower_y_bound;
 
+		// Node not found
 		if (! (act->nodes[next_q])) {
 			act->nodes[next_q] = new SquareNode;
 		}
 		act = act->nodes[next_q];
 	}
 
+	// Finally
 	act->leaf = element;
 }
 
 boost::optional<TData &> QuadTree::Get (unsigned x, unsigned y)
 {
-	return boost::none;
+	SquareNodePtr act = _traverse(x,y);
+	if (act)
+		return boost::optional<TData&>(act->leaf);
+	else
+		return boost::none;
 }
 
 boost::optional<TData const&> QuadTree::Get (unsigned x, unsigned y) const

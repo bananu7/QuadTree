@@ -6,6 +6,9 @@
 #include <vector>
 #include "QuadTree.h"
 
+using std::cout;
+using std::endl;
+
 QuadTree tree;
 
 void keyboard(unsigned char key, int x, int y);
@@ -40,9 +43,16 @@ int main(int argc, char** argv)
     glutInit(&argc, argv);
 	initGL();
  
-	tree.Add (5, 5, 4);
-	tree.Add (5, 4, 5);
-	tree.Add (5, 3, 1);
+	tree.Add (1, 5, 4);
+	tree.Add (2, 4, 5);
+	tree.Add (3, 3, 1);
+
+	const unsigned x = 3, y = 1;
+	auto v = tree.Get(x,y);
+	if (v)
+		cout << "Value in [" << x << ", " << y << "] = " << v.get() << endl;
+	else
+		cout << "Value in [" << x << ", " << y << "] = " << "empty" << endl;
 
 	glutMainLoop();
     return EXIT_SUCCESS;
