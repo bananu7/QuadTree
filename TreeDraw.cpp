@@ -1,41 +1,41 @@
 
 #include "QuadTree.h"
-#include <GL/glew.h>
+#include <Windows.h>
+#include <GL/GL.h>
 
-void DrawSquare (int x, int y, int size, bool solid)
+void DrawSquare (float x, float y, float size, bool solid)
 {
-	glBegin((solid) ? GL_QUADS : GL_LINE_LOOP);
-		glVertex2i(x, y);
-		glVertex2i(x + size, y);
-		glVertex2i(x + size, y + size);
-		glVertex2i(x, y + size);
-	glEnd();
+    glBegin((solid) ? GL_QUADS : GL_LINE_LOOP);
+        glVertex2f(x, y);
+        glVertex2f(x + size, y);
+        glVertex2f(x + size, y + size);
+        glVertex2f(x, y + size);
+    glEnd();
 }
 
-void DrawRecursive(QuadTree::SquareNodePtr node, int level, int x, int y)
+
+void QuadTree::DrawRecursive(QuadTree::SquareNodePtr node, int level, float x, float y)
 {
-	if (node == nullptr)
-		return;
+    if (node == nullptr)
+        return;
 
-	if (level == 0) {
-		glColor3ub(0, 200, 0);
-		DrawSquare(x, y, pow(2, level), true);
-	}
-	else {
-		glColor3ub(255, 200, 255);
-		DrawSquare(x, y, pow(2, level), false);
-			
-			unsigned adv = pow(2, level-1);
+    float sz = sizeInUnits / std::pow(2.f, level);
 
-			DrawRecursive (node->nodes[0], level - 1, x, y);
-			DrawRecursive (node->nodes[1], level - 1, x+adv, y);
-			DrawRecursive (node->nodes[2], level - 1, x, y+adv);
-			DrawRecursive (node->nodes[3], level - 1, x+adv, y+adv);
-	}
+    if (level == maxLOD+1) {
+        glColor3ub(0, 200, 0);
+        DrawSquare(x, y, sz, true);
+    }
+
+    glColor3ub(255, 200, 255);
+    DrawSquare(x, y, sz, false);
+
+    DrawRecursive(node->nodes[0], level + 1, x, y);
+    DrawRecursive(node->nodes[1], level + 1, x + sz/2.f, y);
+    DrawRecursive(node->nodes[2], level + 1, x, y + sz/2.f);
+    DrawRecursive(node->nodes[3], level + 1, x + sz/2.f, y + sz/2.f);
 }
-
 
 void QuadTree::DebugDraw()
 {
-	DrawRecursive(&root, startLevel, 0, 0);
+    DrawRecursive(&root, 0, 0, 0);
 }
