@@ -11,7 +11,7 @@
 using std::cout;
 using std::endl;
 
-QuadTree tree(100.f, 5);
+QuadTree tree(100.f, 2);
 
 void keyboard(unsigned char key, int x, int y);
 void display(void);
@@ -54,13 +54,13 @@ int main(int argc, char** argv) {
     w.mousedownCallback = [&w](oglw::MouseInfo mi) {
         float x = mi.normX * 100.f;
         float y = mi.normY * 100.f;
-        tree.set(x, y, 0);
+        tree.set(x, y, 5);
     };
     w.displayFunc = display;
 
     //test();
-    tree.set(30.f, 30.f, 0);
-    tree.set(51.f, 51.f, 0);
+    tree.set(30.f, 30.f, 5);
+    tree.set(51.f, 51.f, 5);
 
     while (w.display(), w.process()) { }
 }
@@ -79,7 +79,7 @@ void display() {
         glVertex2f(51.f, 51.f);
     glEnd();
 
-    /*{
+    {
         float x = 2.f, y = 9.f, dx = 0.8f, dy = -0.7f;
 
         // This magical piece of code normalizes the vector,
@@ -89,8 +89,8 @@ void display() {
 
         glColor3ub(0, 0, 250);
         DrawLine(x, y, dx, dy, 10);
-        //tree.Raycast(x, y, dx, dy);
-    }*/
+        tree.raycast(QuadTree::Ray{ x, y, dx, dy });
+    }
  
     glFlush();
 }

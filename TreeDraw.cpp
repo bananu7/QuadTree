@@ -21,9 +21,14 @@ void QuadTree::DrawRecursive(QuadTree::SquareNodePtr node, int level, float x, f
 
     float sz = sizeInUnits / std::pow(2.f, level);
 
-    if (level == maxLOD+1) {
+    if (node->leaf != 0) {
         glColor3ub(0, 200, 0);
         DrawSquare(x, y, sz, true);
+
+        glColor3ub(255, 200, 255);
+        DrawSquare(x, y, sz, false);
+
+        return;
     }
 
     glColor3ub(255, 200, 255);
