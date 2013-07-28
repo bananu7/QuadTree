@@ -217,15 +217,6 @@ public:
 
     struct Point { float x, y; };
 
-    /*auto calculateExitPoint = [](
-    float x, float y, float dx, float dy,
-    Extent extent) -> Point {
-
-    // sanity check if x,y is actually inside Extent
-    };*/
-    //Point p = calculateExitPoint(x, y, dx, dy, fr.extent);
-
-
     Direction calculateExitDirection (Ray ray, Extent extent) {
         bool xadv = (ray.dx > 0.f);
         bool yadv = (ray.dy > 0.f);
@@ -277,7 +268,7 @@ public:
     Quadrant calculateImpactSubvoxel(Extent e, Ray r) {
         auto impactTest = calculateImpactDirection(r, e);
         if (!impactTest)
-            throw std::logic_error("Can't determine impact subvoxel because the ray is not hitting the voxel");
+            throw std::logic_error("Can't determine impact  subvoxel because the ray is not hitting the voxel");
 
         // the subtracted value is the difference between
         // the raycast's position and the voxel beginning position
@@ -304,7 +295,36 @@ public:
         }
     }
 
-    Direction calculateImpactDirFromQuadrantProgression(Quadrant a, Quadrant b) {
+
+    // TODO: handling misses? (not really necessary)
+    Point calculateImpactPoint(Ray ray, Extent e) {
+        auto impactTest = calculateImpactDirection(ray, e);
+        if (!impactTest)
+            throw std::logic_error("Can't determine impact  subvoxel because the ray is not hitting the voxel");
+        switch (impactTest.get()){
+        case Direction::TOP: {
+            float hitPoint = calculateLineCrosspoint(e.top, Axis::HORIZONTAL, ray);
+            return Point { hitPoint, e.top };
+            }
+        case Direction::BOTTOM: {
+            float hitPoint = calculateLineCrosspoint(e.bottom, Axis::HORIZONTAL, ray);
+            return Point { hitPoint, e.bottom };
+            }
+        case Direction::LEFT: {
+            float hitPoint = calculateLineCrosspoint(e.left, Axis::VERTICAL, ray);
+            return Point { e.left, hitPoint };
+            }
+        case Direction::RIGHT: {
+            float hitPoint = calculateLineCrosspoint(e.right, Axis::VERTICAL, ray);
+            return Point { e.right, hitPoint };
+            }
+        }
+    }
+
+
+    // DEPRECATED
+    // this apparently wasn't used ever
+    /*Direction calculateImpactDirFromQuadrantProgression(Quadrant a, Quadrant b) {
         int x_bit_a = a & RIGHT_BIT;
         int x_bit_b = b & RIGHT_BIT;
         int y_bit_a = a & BOT_BIT;
@@ -324,7 +344,7 @@ public:
             return (x_bit_diff == 1) ? Direction::RIGHT : Direction::LEFT;
         else
             return (y_bit_diff == 1) ? Direction::BOTTOM : Direction::TOP;
-    }
+    }*/
 
     // should the stack be popped?
     bool isExitingParent(Quadrant q, Direction d) {
@@ -353,7 +373,12 @@ public:
         }
     }
 
-    SquareNodePtr raycast(Ray ray) {
+    struct RaycastResult {
+        SquareNodePtr node;
+        Extent extent;
+        Point impactPoint;
+    };
+    RaycastResult raycast(Ray ray) {
         /*if (!isPointInCurrentExtents(ray.x, ray.y)) {
             throw std::logic_error("Point is outside tree area");
         }*/
@@ -374,7 +399,7 @@ public:
 
         auto impactTest = calculateImpactDirection(ray, rootExtent);
         if (!impactTest)
-            return nullptr;
+            return RaycastResult { nullptr };
 
         // The ray is hitting the root
         Direction impactDir = impactTest.get();
@@ -394,7 +419,7 @@ public:
                         //DEBUG
                         glColor3ub(0, 0, 200);
                         DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
-                        return stack.top().node;
+                        return RaycastResult { stack.top().node, stack.top().extent, calculateImpactPoint(ray, stack.top().extent) };
                     }
 
                     // if we know that the current voxel was hit from side impactDir
@@ -424,7 +449,7 @@ public:
                 if (isExitingParent(stack.top().q, d)) {
                     stack.pop();
                     if (stack.empty()) {
-                        return nullptr;
+                        return RaycastResult { nullptr };
                     }
                 }
                 else {
@@ -434,7 +459,7 @@ public:
 
                     if (stack.empty()) {
                         // root has no siblings
-                        return nullptr;
+                        return RaycastResult { nullptr };
                     }
 
                     // stack top refers to the parent now
@@ -446,7 +471,7 @@ public:
                 }
             }
         }
-        return nullptr;
+        return RaycastResult { nullptr };
     }
 };
 

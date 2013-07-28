@@ -13,13 +13,13 @@ void QuadTree::DrawRecursive(QuadTree::SquareNodePtr node, int level, float x, f
         DrawSquare(x, y, sz, true);
 
         glColor3ub(255, 200, 255);
-        DrawSquare(x, y, sz, false);
+        //DrawSquare(x, y, sz, false);
 
         return;
     }
 
     glColor3ub(255, 200, 255);
-    DrawSquare(x, y, sz, false);
+    //DrawSquare(x, y, sz, false);
 
     DrawRecursive(node->nodes[0], level + 1, x, y);
     DrawRecursive(node->nodes[1], level + 1, x + sz/2.f, y);
