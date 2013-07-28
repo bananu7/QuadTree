@@ -23,21 +23,25 @@ public:
     enum class Direction { TOP, BOTTOM, LEFT, RIGHT };
     struct Extent {
         float left, top, right, bottom;
-        void narrow(Quadrant toQ) {
-            auto halfWidth = std::abs(right - left) * .5f;
-            auto halfHeight = std::abs(bottom - top) * .5f;
-
+        Extent narrow(Quadrant toQ) const {
             // if we are choosing right(->) quadrant, we have to move left border
+            Extent e (*this);
             if (toQ & RIGHT_BIT)
-                left += halfWidth;
+                e.left = left + halfWidth();
             else
-                right -= halfWidth;
+                e.right = right - halfWidth();
 
             if (toQ & BOT_BIT)
-                top += halfHeight;
+                e.top = top + halfHeight();
             else
-                bottom -= halfHeight;
+                e.bottom = bottom - halfHeight();
+            return e;
         }
+        inline float width() const { return std::abs(right - left); }
+        inline float height() const { return std::abs(bottom - top); }
+        // these are quite useful
+        inline float halfWidth() const { return width() * .5f; }
+        inline float halfHeight() const { return height() * .5f; }
     };
 
     struct Ray {
@@ -130,6 +134,8 @@ public:
             return;
 
         TData val = current->nodes[0]->leaf;
+        if (val == 0)
+            return;
         // if not all of them are equal, merge basically fails
         for (unsigned i = 1; i < 4; ++i) {
             if (!(current->nodes[i]))
@@ -164,7 +170,7 @@ public:
             current = current->nodes[q];
             // move the "iterator"
             // and narrow the extents of the current square
-            extent.narrow(q);
+            extent = extent.narrow(q);
         }
 
         current->leaf = val;
@@ -189,7 +195,7 @@ public:
             }
 
             current = current->nodes[q];
-            extent.narrow(q);
+            extent = extent.narrow(q);
             ++level;
         }
         return FindResult { current, extent, level };
@@ -223,13 +229,91 @@ public:
         float vert_len = yadv ? (extent.bottom - ray.y) : (ray.y - extent.top);
 
         float horiz_t = horiz_len / ray.dx;
-        float vert_t = horiz_len / ray.dy;
+        float vert_t = vert_len / ray.dy;
 
         if (horiz_t < vert_t) //exiting in either left or right
-            return xadv ? Direction::BOTTOM : Direction::TOP;
+            return xadv ? Direction::RIGHT : Direction::LEFT;
         else
-            return yadv ? Direction::RIGHT : Direction::LEFT;
+            return yadv ? Direction::BOTTOM : Direction::TOP;
     };
+
+    boost::optional<Direction> calculateImpactDirection(Ray ray, Extent extent) {
+        bool xadv = (ray.dx > 0.f);
+        bool yadv = (ray.dy > 0.f);
+
+        float horiz_len = xadv ? (extent.left - ray.x) : (ray.x - extent.right);
+        float vert_len = yadv ? (extent.top - ray.y) : (ray.y - extent.bottom);
+
+        float horiz_t = horiz_len / ray.dx;
+        float vert_t = vert_len / ray.dy;
+
+        if ((horiz_t < 0) || (vert_t < 0)) {
+            return boost::none;
+        }
+        else {
+            if (horiz_t < vert_t) //exiting in either left or right
+                return xadv ? Direction::LEFT : Direction::RIGHT;
+            else
+                return yadv ? Direction::TOP : Direction::BOTTOM;
+        }
+    }
+
+    enum class Axis { VERTICAL, HORIZONTAL };
+    float calculateLineCrosspoint(float linePos, Axis a, Ray r) {
+        if (a == Axis::VERTICAL) {
+            return (linePos - r.x) / r.dx;
+        }
+        else {
+            return (linePos - r.y) / r.dy;
+        }
+    }
+
+    Quadrant calculateImpactSubvoxel(Extent e, Ray r) {
+        auto impactTest = calculateImpactDirection(r, e);
+        if (!impactTest)
+            throw std::logic_error("Can't determine impact subvoxel because the ray is not hitting the voxel");
+
+        switch (impactTest.get()){
+            case Direction::TOP: {
+                float hitPoint = calculateLineCrosspoint(e.top, Axis::HORIZONTAL, r);
+                return (hitPoint > (e.left + e.halfWidth())) ? TOP_RIGHT : TOP_LEFT;
+            }
+            case Direction::BOTTOM: {
+                float hitPoint = calculateLineCrosspoint(e.bottom, Axis::HORIZONTAL, r);
+                return (hitPoint > (e.left + e.halfWidth())) ? BOT_RIGHT : BOT_LEFT;
+            }
+            case Direction::LEFT: {
+                float hitPoint = calculateLineCrosspoint(e.left, Axis::VERTICAL, r);
+                return (hitPoint > (e.top + e.halfHeight())) ? BOT_LEFT : TOP_LEFT;
+            }
+            case Direction::RIGHT: {
+                float hitPoint = calculateLineCrosspoint(e.right, Axis::VERTICAL, r);
+                return (hitPoint > (e.top + e.halfHeight())) ? BOT_RIGHT : TOP_RIGHT;
+            }
+        }
+    }
+
+    Direction calculateImpactDirFromQuadrantProgression(Quadrant a, Quadrant b) {
+        int x_bit_a = a & RIGHT_BIT;
+        int x_bit_b = b & RIGHT_BIT;
+        int y_bit_a = a & BOT_BIT;
+        int y_bit_b = b & BOT_BIT;
+
+        int x_bit_diff = x_bit_b - x_bit_a;
+        int y_bit_diff = y_bit_b - y_bit_a;
+
+        // if both are 0 or both are changing, it would imply diagonal
+        // movement or no movement, which is forbidden
+        if (x_bit_diff && y_bit_diff)
+            throw std::logic_error("Diagonal voxel movement is forbidden");
+        if ((!x_bit_diff) && (!y_bit_diff))
+            throw std::logic_error("Can't calculate progress because quadrants are equal");
+
+        if (x_bit_diff)
+            return (x_bit_diff == 1) ? Direction::RIGHT : Direction::LEFT;
+        else
+            return (y_bit_diff == 1) ? Direction::BOTTOM : Direction::TOP;
+    }
 
     // should the stack be popped?
     bool isExitingParent(Quadrant q, Direction d) {
@@ -259,58 +343,90 @@ public:
     }
 
     SquareNodePtr raycast(Ray ray) {
-        if (!isPointInCurrentExtents(ray.x, ray.y)) {
+        /*if (!isPointInCurrentExtents(ray.x, ray.y)) {
             throw std::logic_error("Point is outside tree area");
-        }
+        }*/
         // first we have to go as deeply as we can looking for the raycast place
 
         struct StackElem {
             SquareNodePtr node;
             Extent extent;
-            unsigned level;
             Quadrant q;
         };
 
+        const Extent rootExtent { 0, 0, sizeInUnits, sizeInUnits };
+
         std::stack<StackElem> stack;
-        {
-            // prepare stack before further operations
-            StackElem fr { &root, Extent{ 0.f, 0.f, sizeInUnits, sizeInUnits }, 0 };
-            while (fr.level <= maxLOD) {
-                fr.q = calculateQuadrant(ray.x, ray.y, fr.extent);
-                stack.push(fr);
+        // determine the wall of impact on root
+        // if there's no impact on root, return
+        // else push root to the stack
 
-                // no children
-                if (!(fr.node->nodes[fr.q]))
-                    break;
+        auto impactTest = calculateImpactDirection(ray, rootExtent);
+        if (!impactTest)
+            return nullptr;
 
-                fr.node = fr.node->nodes[fr.q];
-                fr.extent.narrow(fr.q);
-                ++fr.level;
-            }
-        }
+        // The ray is hitting the root
+        Direction impactDir = impactTest.get();
+        stack.push(StackElem{ &root, rootExtent, Quadrant::TOP_LEFT });
 
         while (!stack.empty()) {
-            // check if we perhaps already hit something
-            auto& voxel = stack.top();
-            // TEMP: criteria of passing
-            // #### INTERSECT ####
-            if (voxel.node->leaf != 0){
-                return voxel.node;
-            }
-            //else {
-            // #### PUSH ####
+            // shorthand
 
-            //stack.push(stack.top().node->nodes[stack.top().q]);
+            if (stack.top().node) {
+                // check if we perhaps already hit something
+                // if the voxel we are in is filled, we're done
+                // TEMP: criteria of passing
+                if (stack.top().node->leaf != 0){
+                    return stack.top().node;
+                }
+
+                // if the voxel we are at is not filled, try narrowing the impact
+                // voxel basing on ray and impactDir
+                do {
+                    // if we know that the current voxel was hit from side impactDir
+                    // either of subvoxels on the side d was hit
+                    Quadrant q = calculateImpactSubvoxel(stack.top().extent, ray);
+
+                    stack.push(StackElem {
+                        stack.top().node->nodes[q],
+                        stack.top().extent.narrow(q),
+                        q
+                    });
+
+                } while (stack.top().node);
+                // TODO: Check if the level isn't too big considering ray length
+            } 
 
             // #### ADVANCE ####
-            Direction d = calculateExitDirection(ray, voxel.extent);
-            if (isExitingParent(voxel.q, d)) {
+            // if the ray exits the voxel from some side, 
+            // it will also exit the subvoxel from the same side.
+            // in other words, this information can be used to
+            // assess the in-voxel traversion.
+
+            // it doesn't matter if the voxel is actually empty or not at this point
+
+            Direction d = calculateExitDirection(ray, stack.top().extent);
+            if (isExitingParent(stack.top().q, d)) {
                 stack.pop();
             }
             else {
-                stack.top().q = nextNeighbourQuadrant(stack.top().q, d);
+                Quadrant nextQuadrant = nextNeighbourQuadrant(stack.top().q, d);
+
+                stack.pop();
+
+                if (stack.empty()) {
+                    // root has no siblings
+                    return nullptr;
+                }
+                
+                // stack top refers to the parent now
+                Extent nextExtent = stack.top().extent.narrow(nextQuadrant);
+                SquareNodePtr nextNode = stack.top().node->nodes[nextQuadrant];
+
+                stack.push(StackElem{ nextNode, nextExtent, nextQuadrant });
             }
         }
+        return nullptr;
     }
 };
 
