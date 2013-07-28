@@ -25,5 +25,8 @@
     <ClInclude Include="QuadTree.h">
       <Filter>Tree</Filter>
     </ClInclude>
+    <ClInclude Include="UtilDraw.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -6,6 +6,11 @@
 #include <stack>
 #include <algorithm>
 
+//DEBUG only
+#include <Windows.h>
+#include <GL/GL.h>
+#include "UtilDraw.hpp"
+
 typedef unsigned TData;
 
 class QuadTree
@@ -244,6 +249,7 @@ public:
         float horiz_len = xadv ? (extent.left - ray.x) : (ray.x - extent.right);
         float vert_len = yadv ? (extent.top - ray.y) : (ray.y - extent.bottom);
 
+        // we have to determine which plane will be crossed first
         float horiz_t = horiz_len / ray.dx;
         float vert_t = vert_len / ray.dy;
 
@@ -252,19 +258,19 @@ public:
         }
         else {
             if (horiz_t < vert_t) //exiting in either left or right
-                return xadv ? Direction::LEFT : Direction::RIGHT;
-            else
                 return yadv ? Direction::TOP : Direction::BOTTOM;
+            else
+                return xadv ? Direction::LEFT : Direction::RIGHT;
         }
     }
 
     enum class Axis { VERTICAL, HORIZONTAL };
     float calculateLineCrosspoint(float linePos, Axis a, Ray r) {
         if (a == Axis::VERTICAL) {
-            return (linePos - r.x) / r.dx;
+            return (linePos - r.x) / r.dx * r.dy + r.y;
         }
         else {
-            return (linePos - r.y) / r.dy;
+            return (linePos - r.y) / r.dy * r.dx + r.x;
         }
     }
 
@@ -272,6 +278,11 @@ public:
         auto impactTest = calculateImpactDirection(r, e);
         if (!impactTest)
             throw std::logic_error("Can't determine impact subvoxel because the ray is not hitting the voxel");
+
+        // the subtracted value is the difference between
+        // the raycast's position and the voxel beginning position
+        // that's because we have to "convert" that value to voxel-based
+        // number to compare it with the half of the voxel.
 
         switch (impactTest.get()){
             case Direction::TOP: {
@@ -373,16 +384,19 @@ public:
             // shorthand
 
             if (stack.top().node) {
-                // check if we perhaps already hit something
-                // if the voxel we are in is filled, we're done
-                // TEMP: criteria of passing
-                if (stack.top().node->leaf != 0){
-                    return stack.top().node;
-                }
-
-                // if the voxel we are at is not filled, try narrowing the impact
-                // voxel basing on ray and impactDir
+                // if the voxel we are at is not filled, try narrowing the
+                // impact voxel basing on ray and impactDir
                 do {
+                    // check if we perhaps already hit something
+                    // if the voxel we are in is filled, we're done
+                    // TEMP: criteria of passing
+                    if (stack.top().node->leaf != 0){
+                        //DEBUG
+                        glColor3ub(0, 0, 200);
+                        DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
+                        return stack.top().node;
+                    }
+
                     // if we know that the current voxel was hit from side impactDir
                     // either of subvoxels on the side d was hit
                     Quadrant q = calculateImpactSubvoxel(stack.top().extent, ray);
@@ -405,25 +419,28 @@ public:
 
             // it doesn't matter if the voxel is actually empty or not at this point
 
-            Direction d = calculateExitDirection(ray, stack.top().extent);
-            if (isExitingParent(stack.top().q, d)) {
-                stack.pop();
-            }
-            else {
-                Quadrant nextQuadrant = nextNeighbourQuadrant(stack.top().q, d);
-
-                stack.pop();
-
-                if (stack.empty()) {
-                    // root has no siblings
-                    return nullptr;
+            while (true) {
+                Direction d = calculateExitDirection(ray, stack.top().extent);
+                if (isExitingParent(stack.top().q, d)) {
+                    stack.pop();
                 }
-                
-                // stack top refers to the parent now
-                Extent nextExtent = stack.top().extent.narrow(nextQuadrant);
-                SquareNodePtr nextNode = stack.top().node->nodes[nextQuadrant];
+                else {
+                    Quadrant nextQuadrant = nextNeighbourQuadrant(stack.top().q, d);
 
-                stack.push(StackElem{ nextNode, nextExtent, nextQuadrant });
+                    stack.pop();
+
+                    if (stack.empty()) {
+                        // root has no siblings
+                        return nullptr;
+                    }
+
+                    // stack top refers to the parent now
+                    Extent nextExtent = stack.top().extent.narrow(nextQuadrant);
+                    SquareNodePtr nextNode = stack.top().node->nodes[nextQuadrant];
+
+                    stack.push(StackElem{ nextNode, nextExtent, nextQuadrant });
+                    break;
+                }
             }
         }
         return nullptr;

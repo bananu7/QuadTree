@@ -11,8 +11,8 @@
 using std::cout;
 using std::endl;
 
-QuadTree tree(100.f, 2);
-
+QuadTree tree(100.f, 4);
+QuadTree::Ray ray { -5.f, -5.f, 8.f, 6.f };
 
 void keyboard(unsigned char key, int x, int y);
 void display(void);
@@ -58,11 +58,14 @@ int main(int argc, char** argv) {
     w.mousedownCallback = [&](oglw::MouseInfo){ mousePressed = true; };
     w.mouseupCallback = [&](oglw::MouseInfo){ mousePressed = false; };
     w.mousemoveCallback = [&](oglw::MouseInfo mi) {
+        float x = mi.normX * 100.f;
+        float y = mi.normY * 100.f;
         if (mousePressed) {
-            float x = mi.normX * 100.f;
-            float y = mi.normY * 100.f;
             tree.set(x, y, 5);
         }
+
+        ray.dx = (x - ray.x);
+        ray.dy = (y - ray.y);
     };
 
     w.displayFunc = display;
@@ -89,16 +92,15 @@ void display() {
     glEnd();
 
     {
-        float x = 5.f, y = 5.f, dx = 5.f, dy = 3.f;
-
         // This magical piece of code normalizes the vector,
         // because I'm too lazy to calculate it by hand.
-        float len = std::sqrt(dx*dx+dy*dy);
-        dx /= len; dy /= len;
+        ray.x = -5; ray.y = -5;
+        float len = std::sqrt(ray.dx*ray.dx+ray.dy*ray.dy);
+        ray.dx /= len; ray.dy /= len;
 
         glColor3ub(0, 0, 250);
-        DrawLine(x, y, dx, dy, 100.f);
-        tree.raycast(QuadTree::Ray{ x, y, dx, dy });
+        DrawLine(ray.x, ray.y, ray.dx, ray.dy, 100.f);
+        tree.raycast(ray);
     }
  
     glFlush();
