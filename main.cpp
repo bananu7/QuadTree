@@ -11,8 +11,8 @@
 using std::cout;
 using std::endl;
 
-QuadTree tree(100.f, 4);
-QuadTree::Ray ray { -5.f, -5.f, 8.f, 6.f };
+QuadTree tree(100.f, 2);
+QuadTree::Ray ray { 105.f, -5.f, -8.f, 6.f };
 
 void keyboard(unsigned char key, int x, int y);
 void display(void);
@@ -94,7 +94,6 @@ void display() {
     {
         // This magical piece of code normalizes the vector,
         // because I'm too lazy to calculate it by hand.
-        ray.x = -5; ray.y = -5;
         float len = std::sqrt(ray.dx*ray.dx+ray.dy*ray.dy);
         ray.dx /= len; ray.dy /= len;
 

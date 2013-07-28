@@ -230,8 +230,8 @@ public:
         bool xadv = (ray.dx > 0.f);
         bool yadv = (ray.dy > 0.f);
 
-        float horiz_len = xadv ? (extent.right - ray.x) : (ray.x - extent.left);
-        float vert_len = yadv ? (extent.bottom - ray.y) : (ray.y - extent.top);
+        float horiz_len = xadv ? (extent.right - ray.x) : (extent.left - ray.x);
+        float vert_len = yadv ? (extent.bottom - ray.y) : (extent.top - ray.y);
 
         float horiz_t = horiz_len / ray.dx;
         float vert_t = vert_len / ray.dy;
@@ -246,8 +246,8 @@ public:
         bool xadv = (ray.dx > 0.f);
         bool yadv = (ray.dy > 0.f);
 
-        float horiz_len = xadv ? (extent.left - ray.x) : (ray.x - extent.right);
-        float vert_len = yadv ? (extent.top - ray.y) : (ray.y - extent.bottom);
+        float horiz_len = xadv ? (extent.left - ray.x) : (extent.right - ray.x);
+        float vert_len = yadv ? (extent.top - ray.y) : (extent.bottom - ray.y);
 
         // we have to determine which plane will be crossed first
         float horiz_t = horiz_len / ray.dx;
@@ -423,6 +423,9 @@ public:
                 Direction d = calculateExitDirection(ray, stack.top().extent);
                 if (isExitingParent(stack.top().q, d)) {
                     stack.pop();
+                    if (stack.empty()) {
+                        return nullptr;
+                    }
                 }
                 else {
                     Quadrant nextQuadrant = nextNeighbourQuadrant(stack.top().q, d);
