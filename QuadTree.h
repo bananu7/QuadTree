@@ -244,7 +244,7 @@ public:
         float horiz_t = horiz_len / ray.dx;
         float vert_t = vert_len / ray.dy;
 
-        if ((horiz_t < 0) || (vert_t < 0)) {
+        if ((horiz_t < 0) && (vert_t < 0)) {
             return boost::none;
         }
         else {
@@ -392,25 +392,25 @@ public:
         // if there's no impact on root, return
         // else push root to the stack
 
-        auto impactTest = calculateImpactDirection(ray, rootExtent);
-        if (!impactTest) {
-            // if it's not hitting the outer shell, perhaps it's inside
-            if (!isPointInCurrentExtents(ray.x, ray.y)) {
-                // if not it's simply out of root
-                return RaycastResult { nullptr };
-            }
+        // there is only one voxel path that has the beginning of 
+        bool insideCurrentVoxelPath = isPointInCurrentExtents(ray.x, ray.y);
+
+        if (insideCurrentVoxelPath) {
             // we have to localize it inside; that simply means preparing the proper stack beforehand
             Extent extent = rootExtent;
             SquareNode const* current = &root;
+            // root node "is" an arbitrary quadrant
+            Quadrant q = TOP_LEFT;
             while (true) {
-                Quadrant q = calculateQuadrant(ray.x, ray.y, extent);
                 stack.push(StackElem { current, extent, q });
+
+                q = calculateQuadrant(ray.x, ray.y, extent);
+                extent = extent.narrow(q);
 
                 if (!(current->nodes[q])) {
                     break;
                 }
                 current = current->nodes[q];
-                extent = extent.narrow(q);
             }
             
             // starting a ray inside filled voxel could automatically
@@ -419,15 +419,19 @@ public:
 
             }*/
         }
-        // the ray is outside and is properly entering the root
+        // the ray is outside
         else {
+            // check if it hits 
+            auto impactTest = calculateImpactDirection(ray, rootExtent);
+            if (!impactTest) {
+                return RaycastResult { nullptr };
+            }
             // The ray is hitting the root
             stack.push(StackElem{ &root, rootExtent, Quadrant::TOP_LEFT });
         }
 
         while (!stack.empty()) {
-            // shorthand
-
+            // #### PUSH ####
             if (stack.top().node) {
                 // if the voxel we are at is not filled, try narrowing the impact voxel
                 do {
@@ -436,12 +440,20 @@ public:
                     // TEMP: criteria of passing
                     if (stack.top().node->leaf != 0){
                         //DEBUG
-                        //glColor3ub(0, 0, 200);
-                        //DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
+                        glColor3ub(0, 0, 200);
+                        DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
                         return RaycastResult { stack.top().node, stack.top().extent, calculateImpactPoint(ray, stack.top().extent) };
                     }
 
-                    Quadrant q = calculateImpactSubvoxel(stack.top().extent, ray);
+                    Quadrant q;
+                    if (insideCurrentVoxelPath) {
+                        // if the ray is inside, simply use basic calculateQuadrant
+                        q = calculateQuadrant(ray.x, ray.y, stack.top().extent);
+                    }
+                    else {
+                        // if it's not, check impact voxel from outside
+                        q = calculateImpactSubvoxel(stack.top().extent, ray);
+                    }
 
                     stack.push(StackElem {
                         stack.top().node->nodes[q],
@@ -484,6 +496,7 @@ public:
                     Extent nextExtent = stack.top().extent.narrow(nextQuadrant);
                     SquareNodePtr nextNode = stack.top().node->nodes[nextQuadrant];
 
+                    insideCurrentVoxelPath = false;
                     stack.push(StackElem{ nextNode, nextExtent, nextQuadrant });
                     break;
                 }

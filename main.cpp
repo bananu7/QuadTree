@@ -7,12 +7,15 @@
 
 #include "test.h"
 #include "QuadTree.h"
+//#include "high_perf_windows_timer.hpp"
 
 using std::cout;
 using std::endl;
 
 QuadTree tree(100.f, 4);
-QuadTree::Ray ray { -5.f, -5.f, -8.f, 6.f };
+QuadTree::Ray ray { 50.f, 50.f, -5.f, -5.f };
+long long run_time;
+bool cast = false;
 
 void keyboard(unsigned char key, int x, int y);
 void display(void);
@@ -21,6 +24,10 @@ void CheckForError() {
     GLint E = glGetError();
     if (E != 0)
         _CrtDbgBreak();
+}
+
+inline float to_radians(float degrees) {
+    return degrees / 180.f * 3.14159265359f;
 }
 
 void initGL () {
@@ -48,8 +55,15 @@ int main(int argc, char** argv) {
 
     bool mousePressed = false;
 
-    w.mousedownCallback = [&](oglw::MouseInfo){ mousePressed = true; };
-    w.mouseupCallback = [&](oglw::MouseInfo){ mousePressed = false; };
+    w.mousedownCallback = [&](oglw::MouseInfo) {
+        mousePressed = true; 
+    };
+    w.mouseupCallback = [&](oglw::MouseInfo mi) {
+        mousePressed = false; 
+
+        if (mi.button == oglw::MouseInfo::Button::Right)
+            cast = !cast;
+    };
     w.mousemoveCallback = [&](oglw::MouseInfo mi) {
         float x = mi.normX * 100.f;
         float y = mi.normY * 100.f;
@@ -64,8 +78,12 @@ int main(int argc, char** argv) {
     w.displayFunc = display;
 
     //test();
-    tree.set(30.f, 30.f, 5);
-    tree.set(51.f, 51.f, 5);
+    /*srand(42);
+    for (int i = 0; i < 400; ++i) {
+        float rx = (float)(rand()) / RAND_MAX * 60.f;
+        float ry = (float) (rand()) / RAND_MAX * 60.f;
+        tree.set(rx, ry, 5);
+    }*/
 
     while (w.display(), w.process()) { }
 }
@@ -82,6 +100,7 @@ void DrawLine(float x, float y, float dx, float dy, float length) {
 void DrawLine(float x, float y, float x2, float y2) {
     glBegin(GL_LINES);
     glVertex2f(x, y);
+    //glColor4f(.5f, .5f, .5f, 1.f);
     glVertex2f(x2, y2);
     glEnd();
 }
@@ -107,28 +126,47 @@ void display() {
         glVertex2f(51.f, 51.f);
     glEnd();
 
+    static qpc_clock clock;
+
     {
         // This magical piece of code normalizes the vector,
         // because I'm too lazy to calculate it by hand.
         float len = std::sqrt(ray.dx*ray.dx + ray.dy*ray.dy);
         ray.dx /= len; ray.dy /= len;
 
+        float arc = -std::atan2(ray.dx, ray.dy) + 3.146f/2.f;
+
+        //auto time_a = clock.now();
+        
+        float cone_size_degrees = 50;
+        int sample_count = 100;
+
+        //#pragma omp parallel for num_threads(8)
+        for (int i = -sample_count/2; i < sample_count/2; ++i) {
+            QuadTree::Ray tempr = ray;
+
+            float newarc = arc + to_radians((float)i / sample_count * cone_size_degrees);
+            //float newarc = arc;
+            tempr.dx = cosf(newarc);
+            tempr.dy = sinf(newarc);
+
+            //if (cast)
+            auto result = tree.raycast(tempr);
+            glColor3ub(80, 80, 80);
+
+            // if we hit something, draw a proper ray
+            if (result.node)
+            DrawLine(ray.x, ray.y, result.impactPoint.x, result.impactPoint.y);
+            //DrawLine(ray.x, ray.y, tempr.dx, tempr.dy, 50);
+            //DrawTriangle(tempr.x, tempr.y, result.extent.left, result.extent.top, result.extent.right, result.extent.bottom);
+        }
+
         glColor3ub(0, 0, 250);
         glLineWidth(4.f);
         DrawLine(ray.x, ray.y, ray.dx, ray.dy, 100.f);
 
-        float arc = std::atan2(ray.dx, ray.dy);
-        for (int i = -100; i < 100; ++i) {
-            auto tempr = ray;
-            float newarc = arc + (i / 180.f * 3.14f) * 0.1f;
-            tempr.dx = cosf(newarc);
-            tempr.dy = sinf(newarc);
-
-            auto result = tree.raycast(tempr);
-            glColor3ub(80, 80, 80);
-            DrawLine(ray.x, ray.y, result.impactPoint.x, result.impactPoint.y);
-            //DrawTriangle(tempr.x, tempr.y, result.extent.left, result.extent.top, result.extent.right, result.extent.bottom);
-        }
+        //auto time_b = clock.now();
+        //run_time = std::chrono::duration_cast<std::chrono::microseconds>(time_b - time_a).count();
     }
 
     glFlush();

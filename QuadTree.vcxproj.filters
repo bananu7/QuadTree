@@ -28,5 +28,8 @@
     <ClInclude Include="UtilDraw.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="high_perf_windows_timer.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
