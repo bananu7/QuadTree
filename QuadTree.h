@@ -87,12 +87,12 @@ public:
 
 protected:
     // do we need to extend the tree to save it?
-    bool isPointInCurrentExtents(float x, float y) {
+    bool isPointInCurrentExtents(float x, float y) const {
         // Support only for non-negative coords
         if (x < 0.f || y < 0.f) return false;
         return (x <= sizeInUnits && y <= sizeInUnits);
     }
-    Quadrant calculateQuadrant(
+    static Quadrant calculateQuadrant(
         float x, float y,
         Extent const& ex
         )
@@ -217,7 +217,7 @@ public:
 
     struct Point { float x, y; };
 
-    Direction calculateExitDirection (Ray ray, Extent extent) {
+    static Direction calculateExitDirection (Ray ray, Extent extent) {
         bool xadv = (ray.dx > 0.f);
         bool yadv = (ray.dy > 0.f);
 
@@ -233,7 +233,7 @@ public:
             return yadv ? Direction::BOTTOM : Direction::TOP;
     };
 
-    boost::optional<Direction> calculateImpactDirection(Ray ray, Extent extent) {
+    static boost::optional<Direction> calculateImpactDirection(Ray ray, Extent extent) {
         bool xadv = (ray.dx > 0.f);
         bool yadv = (ray.dy > 0.f);
 
@@ -256,7 +256,7 @@ public:
     }
 
     enum class Axis { VERTICAL, HORIZONTAL };
-    float calculateLineCrosspoint(float linePos, Axis a, Ray r) {
+    static float calculateLineCrosspoint(float linePos, Axis a, Ray r) {
         if (a == Axis::VERTICAL) {
             return (linePos - r.x) / r.dx * r.dy + r.y;
         }
@@ -265,7 +265,7 @@ public:
         }
     }
 
-    Quadrant calculateImpactSubvoxel(Extent e, Ray r) {
+    static Quadrant calculateImpactSubvoxel(Extent e, Ray r) {
         auto impactTest = calculateImpactDirection(r, e);
         if (!impactTest)
             throw std::logic_error("Can't determine impact  subvoxel because the ray is not hitting the voxel");
@@ -297,7 +297,7 @@ public:
 
 
     // TODO: handling misses? (not really necessary)
-    Point calculateImpactPoint(Ray ray, Extent e) {
+    static Point calculateImpactPoint(Ray ray, Extent e) {
         auto impactTest = calculateImpactDirection(ray, e);
         if (!impactTest)
             throw std::logic_error("Can't determine impact  subvoxel because the ray is not hitting the voxel");
@@ -347,7 +347,7 @@ public:
     }*/
 
     // should the stack be popped?
-    bool isExitingParent(Quadrant q, Direction d) {
+    static bool isExitingParent(Quadrant q, Direction d) {
         switch (d) {
         case Direction::TOP:
             return (q == TOP_LEFT) || (q == TOP_RIGHT);
@@ -360,7 +360,7 @@ public:
         }
     }
     // if we don't exit parent, what quadrant are we switching to?
-    Quadrant nextNeighbourQuadrant(Quadrant q, Direction d) {
+    static Quadrant nextNeighbourQuadrant(Quadrant q, Direction d) {
         switch (d) {
         case Direction::TOP:
             return (q == BOT_LEFT) ? TOP_LEFT : TOP_RIGHT;
@@ -374,18 +374,13 @@ public:
     }
 
     struct RaycastResult {
-        SquareNodePtr node;
+        SquareNode const* node;
         Extent extent;
         Point impactPoint;
     };
-    RaycastResult raycast(Ray ray) {
-        /*if (!isPointInCurrentExtents(ray.x, ray.y)) {
-            throw std::logic_error("Point is outside tree area");
-        }*/
-        // first we have to go as deeply as we can looking for the raycast place
-
+    RaycastResult raycast(Ray ray) const {
         struct StackElem {
-            SquareNodePtr node;
+            SquareNode const* node;
             Extent extent;
             Quadrant q;
         };
@@ -398,32 +393,54 @@ public:
         // else push root to the stack
 
         auto impactTest = calculateImpactDirection(ray, rootExtent);
-        if (!impactTest)
-            return RaycastResult { nullptr };
+        if (!impactTest) {
+            // if it's not hitting the outer shell, perhaps it's inside
+            if (!isPointInCurrentExtents(ray.x, ray.y)) {
+                // if not it's simply out of root
+                return RaycastResult { nullptr };
+            }
+            // we have to localize it inside; that simply means preparing the proper stack beforehand
+            Extent extent = rootExtent;
+            SquareNode const* current = &root;
+            while (true) {
+                Quadrant q = calculateQuadrant(ray.x, ray.y, extent);
+                stack.push(StackElem { current, extent, q });
 
-        // The ray is hitting the root
-        Direction impactDir = impactTest.get();
-        stack.push(StackElem{ &root, rootExtent, Quadrant::TOP_LEFT });
+                if (!(current->nodes[q])) {
+                    break;
+                }
+                current = current->nodes[q];
+                extent = extent.narrow(q);
+            }
+            
+            // starting a ray inside filled voxel could automatically
+            // be terminated by using this
+            /*if (current->leaf != 0) {
+
+            }*/
+        }
+        // the ray is outside and is properly entering the root
+        else {
+            // The ray is hitting the root
+            stack.push(StackElem{ &root, rootExtent, Quadrant::TOP_LEFT });
+        }
 
         while (!stack.empty()) {
             // shorthand
 
             if (stack.top().node) {
-                // if the voxel we are at is not filled, try narrowing the
-                // impact voxel basing on ray and impactDir
+                // if the voxel we are at is not filled, try narrowing the impact voxel
                 do {
                     // check if we perhaps already hit something
                     // if the voxel we are in is filled, we're done
                     // TEMP: criteria of passing
                     if (stack.top().node->leaf != 0){
                         //DEBUG
-                        glColor3ub(0, 0, 200);
-                        DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
+                        //glColor3ub(0, 0, 200);
+                        //DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
                         return RaycastResult { stack.top().node, stack.top().extent, calculateImpactPoint(ray, stack.top().extent) };
                     }
 
-                    // if we know that the current voxel was hit from side impactDir
-                    // either of subvoxels on the side d was hit
                     Quadrant q = calculateImpactSubvoxel(stack.top().extent, ray);
 
                     stack.push(StackElem {
@@ -455,6 +472,7 @@ public:
                 else {
                     Quadrant nextQuadrant = nextNeighbourQuadrant(stack.top().q, d);
 
+                    // pop the last node to get to its parent
                     stack.pop();
 
                     if (stack.empty()) {
