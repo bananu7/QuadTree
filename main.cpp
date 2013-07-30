@@ -7,14 +7,14 @@
 
 #include "test.h"
 #include "QuadTree.h"
+#include "Renderer.h"
 //#include "high_perf_windows_timer.hpp"
 
 using std::cout;
 using std::endl;
 
-QuadTree tree(100.f, 4);
-QuadTree::Ray ray { 50.f, 50.f, -5.f, -5.f };
 long long run_time;
+Renderer r;
 bool cast = false;
 
 void keyboard(unsigned char key, int x, int y);
@@ -25,11 +25,6 @@ void CheckForError() {
     if (E != 0)
         _CrtDbgBreak();
 }
-
-inline float to_radians(float degrees) {
-    return degrees / 180.f * 3.14159265359f;
-}
-
 void initGL () {
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -37,6 +32,7 @@ void initGL () {
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    glEnable(GL_STENCIL_TEST);
 }
 
 int main(int argc, char** argv) {
@@ -55,24 +51,31 @@ int main(int argc, char** argv) {
 
     bool mousePressed = false;
 
-    w.mousedownCallback = [&](oglw::MouseInfo) {
-        mousePressed = true; 
+    w.mousedownCallback = [&](oglw::MouseInfo mi) {
+        if (mi.button == oglw::MouseInfo::Button::Left)
+            mousePressed = true; 
     };
     w.mouseupCallback = [&](oglw::MouseInfo mi) {
         mousePressed = false; 
 
         if (mi.button == oglw::MouseInfo::Button::Right)
             cast = !cast;
+
+        if (mi.button == oglw::MouseInfo::Button::Middle) {
+            // move the ray to the cursor
+            r.ray.x = mi.normX * 100.f;
+            r.ray.y = mi.normY * 100.f;
+        }
     };
     w.mousemoveCallback = [&](oglw::MouseInfo mi) {
         float x = mi.normX * 100.f;
         float y = mi.normY * 100.f;
         if (mousePressed) {
-            tree.set(x, y, 5);
+            r.tree.set(x, y, Renderer::Voxel(5));
         }
 
-        ray.dx = (x - ray.x);
-        ray.dy = (y - ray.y);
+        r.ray.dx = (x - r.ray.x);
+        r.ray.dy = (y - r.ray.y);
     };
 
     w.displayFunc = display;
@@ -88,86 +91,17 @@ int main(int argc, char** argv) {
     while (w.display(), w.process()) { }
 }
 
-
-void DrawLine(float x, float y, float dx, float dy, float length) {
-    glBegin(GL_LINES);
-    glVertex2f(x, y);
-    glColor4f(.5f, .5f, .5f, 1.f);
-    glVertex2f(x + dx*length, y + dy*length);
-    glEnd();
-}
-
-void DrawLine(float x, float y, float x2, float y2) {
-    glBegin(GL_LINES);
-    glVertex2f(x, y);
-    //glColor4f(.5f, .5f, .5f, 1.f);
-    glVertex2f(x2, y2);
-    glEnd();
-}
-
-void DrawTriangle(float x1, float y1, float x2, float y2, float x3, float y3) {
-    glBegin(GL_TRIANGLES);
-    glVertex2f(x1, y1);
-    glVertex2f(x2, y2);
-    glVertex2f(x3, y3);
-    glEnd();
-}
-
 void display() {
     glClearColor(0.5f, .5f, .5f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
- 
-    tree.DebugDraw();
+    glClearStencil(0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    glColor3ub(255, 0, 0);
-    glPointSize(3.);
-    glBegin(GL_POINTS);
-        glVertex2f(30.f, 30.f);
-        glVertex2f(51.f, 51.f);
-    glEnd();
+    //static qpc_clock clock;
 
-    static qpc_clock clock;
-
-    {
-        // This magical piece of code normalizes the vector,
-        // because I'm too lazy to calculate it by hand.
-        float len = std::sqrt(ray.dx*ray.dx + ray.dy*ray.dy);
-        ray.dx /= len; ray.dy /= len;
-
-        float arc = -std::atan2(ray.dx, ray.dy) + 3.146f/2.f;
-
-        //auto time_a = clock.now();
-        
-        float cone_size_degrees = 50;
-        int sample_count = 100;
-
-        //#pragma omp parallel for num_threads(8)
-        for (int i = -sample_count/2; i < sample_count/2; ++i) {
-            QuadTree::Ray tempr = ray;
-
-            float newarc = arc + to_radians((float)i / sample_count * cone_size_degrees);
-            //float newarc = arc;
-            tempr.dx = cosf(newarc);
-            tempr.dy = sinf(newarc);
-
-            //if (cast)
-            auto result = tree.raycast(tempr);
-            glColor3ub(80, 80, 80);
-
-            // if we hit something, draw a proper ray
-            if (result.node)
-            DrawLine(ray.x, ray.y, result.impactPoint.x, result.impactPoint.y);
-            //DrawLine(ray.x, ray.y, tempr.dx, tempr.dy, 50);
-            //DrawTriangle(tempr.x, tempr.y, result.extent.left, result.extent.top, result.extent.right, result.extent.bottom);
-        }
-
-        glColor3ub(0, 0, 250);
-        glLineWidth(4.f);
-        DrawLine(ray.x, ray.y, ray.dx, ray.dy, 100.f);
-
-        //auto time_b = clock.now();
-        //run_time = std::chrono::duration_cast<std::chrono::microseconds>(time_b - time_a).count();
-    }
+    r.render();
+    //auto time_a = clock.now();
+    //auto time_b = clock.now();
+    //run_time = std::chrono::duration_cast<std::chrono::microseconds>(time_b - time_a).count();
 
     glFlush();
 }

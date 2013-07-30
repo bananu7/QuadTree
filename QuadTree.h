@@ -11,8 +11,12 @@
 #include <GL/GL.h>
 #include "UtilDraw.hpp"
 
-typedef unsigned TData;
 
+struct Ray {
+    float x, y, dx, dy;
+};
+
+template<typename TData>
 class QuadTree
 {
 // temp
@@ -49,10 +53,6 @@ public:
         inline float halfHeight() const { return height() * .5f; }
     };
 
-    struct Ray {
-        float x, y, dx, dy;
-    };
-
     struct SquareNode
     {
         /*
@@ -68,7 +68,6 @@ public:
             nodes[1] = nullptr;
             nodes[2] = nullptr;
             nodes[3] = nullptr;
-            leaf = 0;
         }
     };
     typedef SquareNode* SquareNodePtr;
@@ -105,15 +104,11 @@ protected:
         return Quadrant(xbit + ybit);
     }
 
-    void DrawRecursive(QuadTree::SquareNodePtr node, int level, float x, float y);
-
 public:
     QuadTree(float sizeInUnits, unsigned maxLOD) 
         : sizeInUnits(sizeInUnits)
         , maxLOD(maxLOD)
     { }
-
-    void DebugDraw();
 
     void recursiveDestroy(SquareNodePtr node) {
         if (!node)
@@ -138,8 +133,8 @@ public:
         if (!(current->nodes[0]))
             return;
 
-        TData val = current->nodes[0]->leaf;
-        if (val == 0)
+        TData const& val = current->nodes[0]->leaf;
+        if (!(val.isOpaque()))
             return;
         // if not all of them are equal, merge basically fails
         for (unsigned i = 1; i < 4; ++i) {
@@ -178,7 +173,7 @@ public:
             extent = extent.narrow(q);
         }
 
-        current->leaf = val;
+        current->leaf = std::move(val);
         recursiveMerge(&root);
     }
 
@@ -403,7 +398,7 @@ public:
             Quadrant q = TOP_LEFT;
             while (true) {
                 // might be we already started in filled one
-                if (current->leaf != 0) {
+                if (current->leaf.isOpaque()) {
                     return RaycastResult { nullptr };
                 }
 
@@ -443,7 +438,7 @@ public:
                     // check if we perhaps already hit something
                     // if the voxel we are in is filled, we're done
                     // TEMP: criteria of passing
-                    if (stack.top().node->leaf != 0){
+                    if (stack.top().node->leaf.isOpaque()){
                         //DEBUG
                         //glColor3ub(0, 0, 200);
                         //DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
@@ -509,5 +504,38 @@ public:
         }
         return RaycastResult { nullptr };
     }
+
+
+    void DrawRecursive(SquareNodePtr node, int level, float x, float y)
+    {
+        if (node == nullptr)
+            return;
+
+        float sz = sizeInUnits / std::pow(2.f, level);
+
+        if (node->leaf.isOpaque()) {
+            glColor3ub(0, 200, 0);
+            DrawSquare(x, y, sz, true);
+
+            glColor3ub(255, 200, 255);
+            //DrawSquare(x, y, sz, false);
+
+            return;
+        }
+
+        glColor3ub(255, 200, 255);
+        //DrawSquare(x, y, sz, false);
+
+        DrawRecursive(node->nodes[0], level + 1, x, y);
+        DrawRecursive(node->nodes[1], level + 1, x + sz / 2.f, y);
+        DrawRecursive(node->nodes[2], level + 1, x, y + sz / 2.f);
+        DrawRecursive(node->nodes[3], level + 1, x + sz / 2.f, y + sz / 2.f);
+    }
+
+    void DebugDraw()
+    {
+        DrawRecursive(&root, 0, 0, 0);
+    }
 };
+
 
