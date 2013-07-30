@@ -402,6 +402,11 @@ public:
             // root node "is" an arbitrary quadrant
             Quadrant q = TOP_LEFT;
             while (true) {
+                // might be we already started in filled one
+                if (current->leaf != 0) {
+                    return RaycastResult { nullptr };
+                }
+
                 stack.push(StackElem { current, extent, q });
 
                 q = calculateQuadrant(ray.x, ray.y, extent);
@@ -440,8 +445,8 @@ public:
                     // TEMP: criteria of passing
                     if (stack.top().node->leaf != 0){
                         //DEBUG
-                        glColor3ub(0, 0, 200);
-                        DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
+                        //glColor3ub(0, 0, 200);
+                        //DrawSquare(stack.top().extent.left, stack.top().extent.top, stack.top().extent.height(), true);
                         return RaycastResult { stack.top().node, stack.top().extent, calculateImpactPoint(ray, stack.top().extent) };
                     }
 
